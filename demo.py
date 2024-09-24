@@ -20,14 +20,18 @@ async def test():
 
     print("\n\n")
 
+    """
+    This part of code currently not working, because there is no way to get auth token from LyricsFind API
     # Get translated lyric, based passed language
     translated_first_track: Translation = await client.get_translation(track=tracks[0], lang='en')
 
     res: dict = translated_first_track.__dict__
     res.pop('origin')
     print(res)
+    """
 
     await session.close()
+
 
 c = get_event_loop()
 c.run_until_complete(test())

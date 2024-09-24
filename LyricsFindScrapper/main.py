@@ -1,6 +1,8 @@
+import json
 from datetime import datetime, timedelta
 
 from aiohttp import ClientSession
+from bs4 import BeautifulSoup
 
 from .model import Track, SongData, Translation
 from .const import LYRICSFIND_DOMAIN, Param, HEADERS, TOKEN_EXP
@@ -70,9 +72,11 @@ class Search:
                 tok: str = None
                 
                 async with self.session.get(LYRICSFIND_DOMAIN) as resp:
-                    tok = str(resp.cookies['token']).removeprefix(
-                        "Set-Cookie: token=").replace("; Domain=lyrics.lyricfind.com; Path=/", "")
-                    self.token['grabbed'] = datetime.now()
+                    token: str = resp.cookies.get('token', None)  # because lyricfind changed the way they handle token
+                    if token:
+                        tok = str(resp.cookies['token']).removeprefix(
+                            "Set-Cookie: token=").replace("; Domain=lyrics.lyricfind.com; Path=/", "")
+                        self.token['grabbed'] = datetime.now()
 
                 self.session._default_headers.update({
                     "Authorization": f"Bearer {tok}"
@@ -135,17 +139,23 @@ class Search:
         '''
         Get lyric from database, by given track
         '''
-        url: str = f"{LYRICSFIND_DOMAIN}api/v1/lyric"
+        # set default lyricfind page url to make simple get request
+        url: str = f"{LYRICSFIND_DOMAIN}lyrics/{track.slug}"
 
-        params: dict = Param(self.teritory).get_param_lyrics(lfid=track.lfid)
-        async with self.session.get(url=url, params=params) as resp:
+        # params: dict = Param(self.teritory).get_param_lyrics(lfid=track.lfid)
+        async with self.session.get(url=url) as resp:
             if resp.status < 400:
-                data: dict = await resp.json()
+                html: str = await resp.text()  # retrieve the html page
 
-                if data.get('track', False):
-                    return SongData(data=data['track'])
-                else:
-                    raise LFException(http_code=data['response']['code'])
+                soup = BeautifulSoup(html, 'html.parser')   # parse the html page
+
+                # find the script tag with id __NEXT_DATA__
+                # this tag contains json with song data
+                string_data = soup.find('script', attrs={'id': '__NEXT_DATA__'})
+                data = json.loads(string_data.string)
+
+                # retrieving track data from the json
+                return SongData(data=data['props']['pageProps']['songData']['track'])
             else:
                 raise LFException(http_code=resp.status)
 
@@ -156,6 +166,8 @@ class Search:
         Get translated lyric from database, by given track and language.
 
         This also dynamically check, if passed language is exist or not, if doesnt, will throw exception.
+
+        On this version of the API this method is not working, because there is no way now to get the auth token.
         '''
         if not track.available_translations:
             raise LFException(

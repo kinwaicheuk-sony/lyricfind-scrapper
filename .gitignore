@@ -1,0 +1,6 @@
+venv
+__pycache__
+*.pyc
+*.pyo
+.idea
+LyricsFindScrapper.egg-info
